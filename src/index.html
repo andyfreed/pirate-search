@@ -30,12 +30,24 @@
       </form>
     </header>
 
+    <nav class="browsebar">
+      <span class="browse-label">Top&nbsp;100</span>
+      <button class="chip" data-cat="recent">Recent 48h</button>
+      <button class="chip" data-cat="all">All</button>
+      <button class="chip" data-cat="200">Video</button>
+      <button class="chip" data-cat="100">Audio</button>
+      <button class="chip" data-cat="300">Apps</button>
+      <button class="chip" data-cat="400">Games</button>
+      <button class="chip" data-cat="600">Other</button>
+      <button class="chip chip-x" data-cat="500">XXX</button>
+    </nav>
+
     <section id="settings" class="settings hidden">
       <h2>qBittorrent Web UI</h2>
       <p class="hint">
-        Optional. Enable it in qBittorrent &rarr; Tools &rarr; Options &rarr; Web UI. Then "Send to qB (Web)" pushes
-        magnets to a running (even headless) qBittorrent. The "Open in qBittorrent" button does <em>not</em> need this —
-        it launches your installed client directly.
+        Optional. Enable it in qBittorrent &rarr; Tools &rarr; Options &rarr; Web UI. Then "Web" pushes magnets to a
+        running (even headless) qBittorrent. The "qB" button does <em>not</em> need this — it launches your installed
+        client directly.
       </p>
       <div class="settings-grid">
         <label>Host <input id="qbHost" type="text" value="localhost" /></label>
@@ -49,8 +61,15 @@
       </div>
     </section>
 
+    <div id="updateBar" class="updatebar hidden">
+      <span id="updateText"></span>
+      <button id="updateAction" type="button" class="hidden"></button>
+      <button id="updateDismiss" type="button" class="updatebar-x" title="Dismiss">&times;</button>
+    </div>
+
     <main>
-      <div id="status" class="status">Type a search above to begin.</div>
+      <div id="resultsHeading" class="results-heading hidden"></div>
+      <div id="status" class="status">Search above, or pick a <strong>Top&nbsp;100</strong> list to browse.</div>
       <table id="resultsTable" class="results hidden">
         <thead>
           <tr>
@@ -69,7 +88,11 @@
 
     <footer class="footer">
       <span id="qbDetect" class="detect"></span>
-      <span class="disclaimer">Data from apibay.org &middot; magnets only, no files hosted here.</span>
+      <span class="foot-right">
+        <span id="appVersion" class="version"></span>
+        <button id="checkUpdates" type="button" class="linklike">Check for updates</button>
+        <span class="disclaimer">Data from apibay.org &middot; magnets only</span>
+      </span>
     </footer>
 
     <script src="renderer.js"></script>

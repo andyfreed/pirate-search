@@ -3,6 +3,7 @@ const { app, BrowserWindow, ipcMain, shell, clipboard } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
+const { autoUpdater } = require('electron-updater');
 const { parseResults } = require('./lib/torrents');
 
 const APIBAY = 'https://apibay.org';
@@ -29,9 +30,9 @@ let win;
 function createWindow() {
   win = new BrowserWindow({
     width: 1120,
-    height: 780,
-    minWidth: 840,
-    minHeight: 540,
+    height: 800,
+    minWidth: 860,
+    minHeight: 560,
     backgroundColor: '#0d1626',
     title: 'Pirate Search',
     webPreferences: {
@@ -47,6 +48,7 @@ function createWindow() {
 
 app.whenReady().then(() => {
   createWindow();
+  setupAutoUpdate();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
@@ -56,7 +58,45 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
 
+// ---------------------------------------------------------------- auto-update
+function sendUpdate(payload) {
+  if (win && !win.isDestroyed()) win.webContents.send('update-status', payload);
+}
+
+function setupAutoUpdate() {
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+
+  autoUpdater.on('checking-for-update', () => sendUpdate({ state: 'checking' }));
+  autoUpdater.on('update-available', (info) => sendUpdate({ state: 'available', version: info.version }));
+  autoUpdater.on('update-not-available', () => sendUpdate({ state: 'none' }));
+  autoUpdater.on('download-progress', (p) => sendUpdate({ state: 'downloading', percent: p.percent }));
+  autoUpdater.on('update-downloaded', (info) => sendUpdate({ state: 'ready', version: info.version }));
+  autoUpdater.on('error', (err) => sendUpdate({ state: 'error', message: String(err && err.message ? err.message : err) }));
+
+  // Only check in the installed/packaged app (dev runs have no update feed).
+  if (app.isPackaged) {
+    setTimeout(() => autoUpdater.checkForUpdates().catch(() => {}), 3000);
+  }
+}
+
 // ---------------------------------------------------------------- IPC handlers
+ipcMain.handle('get-version', async () => app.getVersion());
+
+ipcMain.handle('check-updates', async () => {
+  if (!app.isPackaged) return { dev: true };
+  try {
+    await autoUpdater.checkForUpdates();
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: String(err && err.message ? err.message : err) };
+  }
+});
+
+ipcMain.handle('install-update', async () => {
+  setImmediate(() => autoUpdater.quitAndInstall());
+  return { ok: true };
+});
 
 ipcMain.handle('search', async (_e, { query, cat }) => {
   const q = encodeURIComponent((query || '').trim());
@@ -65,17 +105,24 @@ ipcMain.handle('search', async (_e, { query, cat }) => {
   const url = `${APIBAY}/q.php?q=${q}&cat=${c}`;
   const res = await fetch(url, { headers: { 'User-Agent': 'PirateSearch/1.0' } });
   if (!res.ok) throw new Error('apibay HTTP ' + res.status);
-  const json = await res.json();
-  return parseResults(json);
+  return parseResults(await res.json());
+});
+
+// Top 100 / browse via apibay's precompiled lists.
+ipcMain.handle('top100', async (_e, { cat }) => {
+  const file = cat === 'recent' ? 'data_top100_recent.json' : `data_top100_${cat}.json`;
+  const url = `${APIBAY}/precompiled/${file}`;
+  const res = await fetch(url, { headers: { 'User-Agent': 'PirateSearch/1.0' } });
+  if (!res.ok) throw new Error('apibay HTTP ' + res.status);
+  return parseResults(await res.json());
 });
 
 ipcMain.handle('qb-detect', async () => ({ path: findQbittorrent() }));
 
-// Hand the magnet straight to the installed qBittorrent client.
 ipcMain.handle('open-in-qb', async (_e, { magnet }) => {
   const qb = findQbittorrent();
   if (!qb) {
-    await shell.openExternal(magnet); // fall back to the OS default magnet handler
+    await shell.openExternal(magnet);
     return { ok: true, via: 'default-handler' };
   }
   const child = spawn(qb, [magnet], { detached: true, stdio: 'ignore' });
@@ -93,7 +140,6 @@ ipcMain.handle('copy', async (_e, { text }) => {
   return { ok: true };
 });
 
-// Push the magnet to a running qBittorrent Web UI (Tools > Options > Web UI).
 ipcMain.handle('qb-web-add', async (_e, { magnet, host, port, username, password }) => {
   const base = `http://${host}:${port}`;
 

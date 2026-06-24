@@ -10,6 +10,7 @@ const els = {
   settingsBtn: $('#settingsBtn'),
   settings: $('#settings'),
   status: $('#status'),
+  heading: $('#resultsHeading'),
   table: $('#resultsTable'),
   results: $('#results'),
   qbHost: $('#qbHost'),
@@ -19,6 +20,12 @@ const els = {
   saveSettings: $('#saveSettings'),
   qbStatus: $('#qbStatus'),
   qbDetect: $('#qbDetect'),
+  appVersion: $('#appVersion'),
+  checkUpdates: $('#checkUpdates'),
+  updateBar: $('#updateBar'),
+  updateText: $('#updateText'),
+  updateAction: $('#updateAction'),
+  updateDismiss: $('#updateDismiss'),
 };
 
 const SETTINGS_KEY = 'pirateSearch.qb';
@@ -60,9 +67,14 @@ function escapeHtml(s) {
 }
 
 function setStatus(msg, kind) {
-  els.status.textContent = msg;
+  els.status.innerHTML = msg;
   els.status.className = 'status' + (kind ? ' ' + kind : '');
   els.status.classList.remove('hidden');
+}
+
+function setHeading(text) {
+  els.heading.textContent = text;
+  els.heading.classList.remove('hidden');
 }
 
 function flash(btn, text, ok) {
@@ -138,7 +150,7 @@ function updateSortIndicators() {
   });
 }
 
-// ---------------------------------------------------------------- actions
+// ---------------------------------------------------------------- data loads
 async function doSearch(e) {
   if (e) e.preventDefault();
   const query = els.query.value.trim();
@@ -146,32 +158,58 @@ async function doSearch(e) {
     setStatus('Type something to search.');
     return;
   }
+  setActiveChip(null);
   els.searchBtn.disabled = true;
-  setStatus('Searching for "' + query + '"…');
+  setHeading('Search: "' + query + '"');
+  setStatus('Searching for "' + escapeHtml(query) + '"…');
   els.table.classList.add('hidden');
   try {
     currentRows = await window.api.search(query, els.category.value);
     if (!currentRows.length) {
-      setStatus('No results for "' + query + '".');
+      setStatus('No results for "' + escapeHtml(query) + '".');
       return;
     }
     sortKey = 'seeders';
     sortDir = -1;
     render();
   } catch (err) {
-    setStatus('Search failed: ' + (err && err.message ? err.message : err), 'bad-text');
+    setStatus('Search failed: ' + escapeHtml(err && err.message ? err.message : String(err)), 'bad-text');
   } finally {
     els.searchBtn.disabled = false;
   }
 }
 
+async function loadTop100(cat, label, chipEl) {
+  setActiveChip(chipEl);
+  setHeading('Top 100 · ' + label);
+  setStatus('Loading Top 100 — ' + escapeHtml(label) + '…');
+  els.table.classList.add('hidden');
+  try {
+    currentRows = await window.api.top100(cat);
+    if (!currentRows.length) {
+      setStatus('Nothing to show for ' + escapeHtml(label) + '.');
+      return;
+    }
+    sortKey = 'seeders';
+    sortDir = -1;
+    render();
+  } catch (err) {
+    setStatus('Failed to load Top 100: ' + escapeHtml(err && err.message ? err.message : String(err)), 'bad-text');
+  }
+}
+
+function setActiveChip(chipEl) {
+  document.querySelectorAll('.chip').forEach((c) => c.classList.toggle('active', c === chipEl));
+}
+
+// ---------------------------------------------------------------- actions
 async function openInQb(row, btn) {
   try {
     const r = await window.api.openInQb(row.magnet);
     flash(btn, r.via === 'qbittorrent' ? 'Sent' : 'Opened', true);
   } catch (err) {
     flash(btn, 'Err', false);
-    setStatus('Could not open in qBittorrent: ' + err.message, 'bad-text');
+    setStatus('Could not open in qBittorrent: ' + escapeHtml(err.message), 'bad-text');
   }
 }
 
@@ -183,7 +221,7 @@ async function sendWeb(row, btn) {
     flash(btn, 'Added', true);
   } catch (err) {
     flash(btn, 'Fail', false);
-    setStatus('Web UI add failed: ' + err.message, 'bad-text');
+    setStatus('Web UI add failed: ' + escapeHtml(err.message), 'bad-text');
   } finally {
     btn.disabled = false;
   }
@@ -194,10 +232,53 @@ async function copyMagnet(row, btn) {
   flash(btn, 'Copied', true);
 }
 
+// ---------------------------------------------------------------- updates UI
+function handleUpdateStatus(d) {
+  const { updateBar, updateText, updateAction } = els;
+  updateAction.classList.add('hidden');
+  updateAction.onclick = null;
+  let autoHide = 0;
+
+  switch (d.state) {
+    case 'checking':
+      updateText.textContent = 'Checking for updates…';
+      break;
+    case 'available':
+      updateText.textContent = 'Update v' + d.version + ' found — downloading…';
+      break;
+    case 'downloading':
+      updateText.textContent = 'Downloading update… ' + Math.round(d.percent || 0) + '%';
+      break;
+    case 'ready':
+      updateText.textContent = 'Update v' + d.version + ' is ready to install.';
+      updateAction.textContent = 'Restart & install';
+      updateAction.classList.remove('hidden');
+      updateAction.onclick = () => window.api.installUpdate();
+      break;
+    case 'none':
+      updateText.textContent = 'You’re on the latest version.';
+      autoHide = 3000;
+      break;
+    case 'error':
+      updateText.textContent = 'Update check failed: ' + (d.message || 'unknown error');
+      autoHide = 6000;
+      break;
+    default:
+      return;
+  }
+  updateBar.classList.remove('hidden');
+  if (autoHide) setTimeout(() => updateBar.classList.add('hidden'), autoHide);
+}
+
 // ---------------------------------------------------------------- wiring
 els.form.addEventListener('submit', doSearch);
 els.settingsBtn.addEventListener('click', () => els.settings.classList.toggle('hidden'));
 els.saveSettings.addEventListener('click', saveSettings);
+els.updateDismiss.addEventListener('click', () => els.updateBar.classList.add('hidden'));
+
+document.querySelectorAll('.chip').forEach((chip) => {
+  chip.addEventListener('click', () => loadTop100(chip.dataset.cat, chip.textContent.trim(), chip));
+});
 
 document.querySelectorAll('th[data-sort]').forEach((th) => {
   th.addEventListener('click', () => {
@@ -207,12 +288,31 @@ document.querySelectorAll('th[data-sort]').forEach((th) => {
       sortKey = key;
       sortDir = typeof currentRows[0]?.[key] === 'string' ? 1 : -1;
     }
-    render();
+    if (currentRows.length) render();
   });
 });
 
+els.checkUpdates.addEventListener('click', async () => {
+  const r = await window.api.checkUpdates();
+  if (r && r.dev) {
+    els.updateText.textContent = 'Auto-update only runs in the installed app (you’re in dev mode).';
+    els.updateBar.classList.remove('hidden');
+    setTimeout(() => els.updateBar.classList.add('hidden'), 4000);
+  } else if (r && r.error) {
+    handleUpdateStatus({ state: 'error', message: r.error });
+  }
+});
+
+window.api.onUpdateStatus(handleUpdateStatus);
+
 (async function init() {
   loadSettings();
+  try {
+    const v = await window.api.getVersion();
+    els.appVersion.textContent = 'v' + v;
+  } catch (_) {
+    /* ignore */
+  }
   try {
     const d = await window.api.qbDetect();
     if (d && d.path) {
