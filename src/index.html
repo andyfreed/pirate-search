@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none'"
+    />
+    <title>Pirate Search</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark">&#9760;</span>
+        <span class="brand-name">Pirate Search</span>
+      </div>
+      <form id="searchForm" class="search">
+        <input id="query" type="text" placeholder="Search torrents&hellip;" autocomplete="off" autofocus />
+        <select id="category" title="Category">
+          <option value="0">All</option>
+          <option value="200">Video</option>
+          <option value="100">Audio</option>
+          <option value="300">Applications</option>
+          <option value="400">Games</option>
+          <option value="600">Other</option>
+        </select>
+        <button id="searchBtn" type="submit">Search</button>
+        <button id="settingsBtn" type="button" class="ghost" title="qBittorrent Web UI settings">&#9881;</button>
+      </form>
+    </header>
+
+    <section id="settings" class="settings hidden">
+      <h2>qBittorrent Web UI</h2>
+      <p class="hint">
+        Optional. Enable it in qBittorrent &rarr; Tools &rarr; Options &rarr; Web UI. Then "Send to qB (Web)" pushes
+        magnets to a running (even headless) qBittorrent. The "Open in qBittorrent" button does <em>not</em> need this —
+        it launches your installed client directly.
+      </p>
+      <div class="settings-grid">
+        <label>Host <input id="qbHost" type="text" value="localhost" /></label>
+        <label>Port <input id="qbPort" type="text" value="8080" /></label>
+        <label>Username <input id="qbUser" type="text" value="admin" /></label>
+        <label>Password <input id="qbPass" type="password" /></label>
+      </div>
+      <div class="settings-actions">
+        <button id="saveSettings" type="button">Save</button>
+        <span id="qbStatus" class="qb-status"></span>
+      </div>
+    </section>
+
+    <main>
+      <div id="status" class="status">Type a search above to begin.</div>
+      <table id="resultsTable" class="results hidden">
+        <thead>
+          <tr>
+            <th class="col-name" data-sort="name">Name</th>
+            <th class="col-cat" data-sort="categoryText">Type</th>
+            <th class="col-size num" data-sort="size">Size</th>
+            <th class="col-se num" data-sort="seeders">Seed</th>
+            <th class="col-le num" data-sort="leechers">Leech</th>
+            <th class="col-date" data-sort="added">Added</th>
+            <th class="col-actions">Get</th>
+          </tr>
+        </thead>
+        <tbody id="results"></tbody>
+      </table>
+    </main>
+
+    <footer class="footer">
+      <span id="qbDetect" class="detect"></span>
+      <span class="disclaimer">Data from apibay.org &middot; magnets only, no files hosted here.</span>
+    </footer>
+
+    <script src="renderer.js"></script>
+  </body>
+</html>
